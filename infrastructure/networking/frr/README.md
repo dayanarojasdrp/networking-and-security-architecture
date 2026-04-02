@@ -1,125 +1,123 @@
-#  Docker Networking Lab with FRRouting (FRR)
+# FRR Routing Configuration
 
 ##  Overview
 
-This project simulates a network architecture using Docker containers and FRRouting (FRR).
+This section defines the routing configuration for the lab environment using FRR (Free Range Routing).
 
-It includes:
-
-* Static routing between routers
-* Communication across multiple subnets
-* NAT (Network Address Translation) for internet access
+The goal is to simulate a real-world network topology with multiple subnets, routers, and controlled traffic flow between segments.
 
 ---
 
-##  Topology
+## Network Topology
 
-```
-[ APP Network ]
-     |
-     R2
-     |
-     R1 (NAT)----[LAN Net]
-     |
-  Internet
-```
+The lab is composed of two routers:
 
----
+* **R1** → Main router (acts as gateway to the internet)
+* **R2** → Internal router (connects application network to R1)
 
-##  Networks
+### Subnets
 
-| Network          | Subnet         | Purpose             |
-| ---------------- | -------------- | ------------------- |
-| internet_net     | 10.0.0.0/24    | External access     |
-| inter_router_net | 192.168.0.0/28 | R1 ↔ R2             |
-| lan_net          | 172.20.0.0/24  | Internal LAN        |
-| app_net          | 172.21.0.0/24  | Application network |
+| Network          | CIDR           | Description           |
+| ---------------- | -------------- | --------------------- |
+| Internet Network | 10.0.0.0/24    | Simulated internet    |
+| Inter-router     | 192.168.0.0/28 | R1 ↔ R2 communication |
+| LAN Network      | 172.20.0.0/24  | Internal LAN          |
+| App Network      | 172.21.0.0/24  | Application network   |
 
 ---
 
-## Components
+##  Network Roles
 
-* **R1** → Edge router with NAT
-* **R2** → Internal router
-* **Alpine container** → Test host
+### R1 Interfaces
 
----
+| Interface | Network        | Role             |
+| --------- | -------------- | ---------------- |
+| eth1      | 10.0.0.0/24    | Internet gateway |
+| eth2      | 192.168.0.0/28 | Connection to R2 |
+| eth3      | 172.20.0.0/24  | LAN network      |
 
-##  How to Run
+### R2 Interfaces
 
-### 1. Create networks
-
-```bash
-./scripts/create_networks.sh
-```
-
-### 2. Start routers
-
-```bash
-./scripts/run_routers.sh
-```
-
-### 3. Apply NAT
-
-```bash
-./scripts/nat.sh
-```
+| Interface | Network        | Role                |
+| --------- | -------------- | ------------------- |
+| eth1      | 192.168.0.0/28 | Connection to R1    |
+| eth2      | 172.21.0.0/24  | Application network |
 
 ---
 
-##  Testing
+##  Routing Strategy
 
-Run a test container:
+### R1
 
-```bash
-docker run -it --rm --network app_net alpine sh
-```
+R1 is responsible for:
 
-Test connectivity:
+* Routing traffic between all networks
+* Providing internet access (default gateway)
+* Applying NAT for outbound traffic
 
-```bash
-ping 8.8.8.8
-```
+#### Routes
 
----
-
-##  Expected Result
-
-* Internal networks can communicate
-* Traffic is routed through R1
-* NAT allows internet access
+* Default route → Internet gateway (10.0.0.1)
+* Route to App Network → via R2 (192.168.0.4)
 
 ---
 
-##  Key Learnings
+### R2
 
-* Linux networking fundamentals
-* Static routing with FRR
-* NAT using iptables
-* Debugging real network issues
+R2 is responsible for:
 
----
+* Connecting the App Network to the rest of the infrastructure
+* Forwarding traffic to R1
 
-## Troubleshooting Insights
+#### Routes
 
-* Incorrect destination IP can break connectivity
-* Default route misconfiguration causes packet loss
-* IP forwarding must be enabled
-* Docker network gateway (.1) must be considered
+* Default route → R1 (192.168.0.2)
+* Route to LAN → via R1
+* Route to Internet → via R1
 
 ---
 
-##  Project Structure
+##  Packet Flow
 
-```
-infrastructure/networking/frr/lab-docker/
-```
+### App → Internet
+
+1. App container sends traffic to R2
+2. R2 forwards to R1
+3. R1 performs NAT
+4. Traffic exits to internet
+5. Response returns via R1 → R2 → App
+
+---
+
+### LAN → Internet
+
+1. LAN sends traffic to R1
+2. R1 performs NAT
+3. Traffic exits to internet
+4. Response returns to LAN
+
+---
+
+### App → LAN (Blocked)
+
+Traffic is explicitly blocked by firewall rules in R1.
+
+---
+
+##  Notes
+
+* Routing is based on static routes
+* NAT is only applied on R1
+* Firewall rules enforce network segmentation
+* Interface naming must match Docker network attachments
 
 ---
 
 ##  Future Improvements
 
-* OSPF dynamic routing
-* Firewall rules
-* Traffic filtering
-* High availability scenarios
+* Add IPv6 support (dual stack)
+* Replace static routing with dynamic protocols (OSPF/BGP)
+* Introduce network policies for fine-grained control
+
+---
+
