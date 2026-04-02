@@ -1,4 +1,5 @@
 R1:
+```
 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN qlen 1000
     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
     inet 127.0.0.1/8 scope host lo
@@ -17,8 +18,9 @@ R1:
     link/ether be:78:8b:e5:c1:ed brd ff:ff:ff:ff:ff:ff
     inet 172.20.0.1/24 brd 172.20.0.255 scope global eth3
        valid_lft forever preferred_lft forever
-
+```
 R2:
+```
 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN qlen 1000
     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
     inet 127.0.0.1/8 scope host lo
@@ -33,3 +35,4 @@ R2:
     link/ether 6e:5c:af:93:8e:81 brd ff:ff:ff:ff:ff:ff
     inet 172.21.0.1/24 brd 172.21.0.255 scope global eth2
        valid_lft forever preferred_lft forever
+```
