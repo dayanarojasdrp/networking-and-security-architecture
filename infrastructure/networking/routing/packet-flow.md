@@ -1,191 +1,236 @@
-# Packet Flow Scenarios
+# Packet Flow Scenarios (Updated)
 
-##  Overview
+## Overview
 
-This document describes how packets travel across the network under different scenarios.
+This document describes how packets flow across the network in the current lab implementation.
 
-The lab simulates a segmented infrastructure with controlled communication between networks using routing, NAT, and firewall rules.
+The architecture simulates a segmented infrastructure using:
 
----
+* Multi-router topology (R1 as NAT Gateway, R2 as internal router)
+* Docker-based subnets
+* Stateful firewall (iptables)
+* Source NAT (MASQUERADE)
 
-##  Network Summary
-
-| Network      | CIDR           | Description         |
-| ------------ | -------------- | ------------------- |
-| Internet     | 10.0.0.0/24    | External network    |
-| Inter-router | 192.168.0.0/28 | R1 ↔ R2 connection  |
-| LAN          | 172.20.0.0/24  | Internal LAN        |
-| App Network  | 172.21.0.0/24  | Application network |
+All outbound traffic is forced through R1, which acts as the security boundary.
 
 ---
 
-##  Scenario 1 — App → Internet
+## Network Summary
+
+| Network      | CIDR           | Description                     |
+| ------------ | -------------- | ------------------------------- |
+| Internet     | 172.17.0.0/16  | Docker bridge (external access) |
+| Inter-router | 192.168.0.0/28 | R1 ↔ R2 communication           |
+| LAN          | 172.20.0.0/24  | Internal LAN                    |
+| App Network  | 172.21.0.0/24  | Application network             |
+
+---
+
+## Architecture Roles
+
+| Component | Role                          |
+| --------- | ----------------------------- |
+| R1        | NAT Gateway + Firewall        |
+| R2        | Internal router (App network) |
+| LAN       | Internal clients              |
+| APP       | Application subnet            |
+
+---
+
+## Scenario 1 — App → Internet
 
 ### Flow
 
-1. A container in the App Network (172.21.0.0/24) sends traffic
-2. Packet goes to R2 (default gateway)
-3. R2 forwards packet to R1 via inter-router network
-4. R1 receives packet and checks firewall rules
+1. App container (172.21.0.x) sends traffic
+2. Default gateway → R2 (172.21.0.2)
+3. R2 forwards traffic to R1 (192.168.0.2)
+4. R1 evaluates firewall rules
 5. Traffic is allowed (APP → Internet permitted)
-6. R1 applies NAT (MASQUERADE)
-7. Packet exits to the Internet (10.0.0.0/24)
+6. R1 applies NAT (MASQUERADE on eth2)
+7. Packet exits via Docker bridge (172.17.0.0/16)
 8. Response returns to R1
-9. R1 matches connection (RELATED, ESTABLISHED)
+9. R1 matches connection tracking (ESTABLISHED, RELATED)
 10. Packet is forwarded back to R2
-11. R2 delivers packet to the App container
+11. R2 delivers packet to App container
 
 ### Result
 
- Allowed
- NAT applied
- Fully functional outbound connectivity
+✔ Allowed
+✔ NAT applied at R1
+✔ Fully functional outbound connectivity
 
 ---
 
-##  Scenario 2 — LAN → Internet
+## Scenario 2 — LAN → Internet
 
 ### Flow
 
-1. A host in the LAN (172.20.0.0/24) sends traffic
-2. Packet goes directly to R1
-3. R1 checks firewall rules
+1. LAN host (172.20.0.x) sends traffic
+2. Default gateway → R1 (172.20.0.2)
+3. R1 evaluates firewall rules
 4. Traffic is allowed (LAN → Internet permitted)
 5. R1 applies NAT (MASQUERADE)
-6. Packet exits to the Internet
+6. Packet exits via eth2 (Docker bridge)
 7. Response returns to R1
 8. R1 forwards response back to LAN
 
 ### Result
 
- Allowed
- NAT applied
- Direct internet access
+✔ Allowed
+✔ NAT applied
+✔ Direct outbound access
 
 ---
 
-##  Scenario 3 — App → LAN (Blocked)
+## Scenario 3 — App → LAN (Blocked)
 
 ### Flow
 
-1. App container sends packet to LAN (172.20.0.0/24)
+1. App container sends traffic to LAN (172.20.0.0/24)
 2. Packet reaches R2
 3. R2 forwards to R1
 4. R1 evaluates firewall rules
-5. Matching DROP rule is found
+5. Explicit DROP rule matches
 6. Packet is discarded
 
 ### Result
 
- Blocked by firewall
- No communication allowed
+ Blocked
+ No lateral movement
+ Network segmentation enforced
 
 ---
 
-##  Scenario 4 — LAN → App (Blocked)
+## Scenario 4 — LAN → App (Blocked)
 
 ### Flow
 
-1. LAN host sends packet to App Network
+1. LAN host sends traffic to App Network
 2. Packet reaches R1
 3. Firewall rules are evaluated
-4. DROP rule is matched
+4. DROP rule matches
 5. Packet is discarded
 
 ### Result
 
- Blocked by firewall
- Segmentation enforced
+ Blocked
+ Isolation between subnets
 
 ---
 
-##  Scenario 5 — R2 → Internet
+## Scenario 5 — R2 → Internet (Current Behavior)
 
 ### Flow
 
-1. R2 sends traffic (e.g., ping 8.8.8.8)
-2. Packet is forwarded to R1 (default route)
-3. R1 checks firewall rules
-4. Traffic is allowed (inter-router → internet)
-5. R1 applies NAT
-6. Packet exits to internet
-7. Response returns to R1
-8. R1 forwards response back to R2
+1. R2 generates traffic (e.g., ping 8.8.8.8)
+2. Packet is sent to R1 (default route)
+3. Traffic is evaluated by firewall
+
+### Current Behavior
+
+ Not allowed by design
+
+### Explanation
+
+* Firewall rules are focused on forwarding traffic from internal networks
+* R2 is not intended to act as an internet client
+* The architecture enforces that only internal networks (LAN / APP) access external resources
 
 ### Result
 
- Allowed
- NAT applied
- Router connectivity verified
+ No direct internet access from R2
+ Consistent with secure network design
 
 ---
 
-##  Scenario 6 — Return Traffic Handling
+## Scenario 6 — Return Traffic Handling
 
 ### Flow
 
 1. Internal host initiates connection
-2. External server responds
-3. Packet arrives at R1
-4. R1 matches connection tracking state:
 
-   * RELATED
+2. External system responds
+
+3. Packet arrives at R1
+
+4. Connection tracking module evaluates state:
+
    * ESTABLISHED
-5. Packet is allowed automatically
+   * RELATED
+
+5. Packet is automatically allowed
+
+6. Traffic is forwarded back to origin
 
 ### Result
 
- Allowed without explicit rule
- Connection tracking ensures responses
+ No explicit rule required
+ Stateful firewall behavior
 
 ---
 
-##  Key Concepts
+## Key Concepts
 
 ### NAT (MASQUERADE)
 
-* Translates private IPs into public IP (R1)
-* Required for IPv4 internet access
-
----
-
-### FORWARD Chain
-
-* Controls traffic passing through routers
-* Determines which networks can communicate
+* Implemented on R1 (eth2)
+* Translates private IPs to external interface
+* Required for outbound internet access
 
 ---
 
 ### Stateful Firewall
 
-* Uses connection tracking
+* Based on connection tracking
 * Allows return traffic automatically
+* Prevents unsolicited inbound connections
 
 ---
 
 ### Network Segmentation
 
-* Prevents lateral movement
-* Enforces isolation between LAN and App Network
+* LAN and APP networks are isolated
+* No lateral movement allowed
+* Enforced via DROP rules in FORWARD chain
 
 ---
 
-##  Summary
+### Controlled Egress
 
-| Scenario       | Result   |
-| -------------- | -------- |
-| App → Internet |  Allowed |
-| LAN → Internet |  Allowed |
-| R2 → Internet  |  Allowed |
-| App → LAN      |  Blocked |
-| LAN → App      |  Blocked |
+* Only approved subnets can access internet
+* Traffic must pass through R1
 
 ---
 
-##  Future Enhancements
+## Summary
 
-* IPv6 packet flow (no NAT)
-* Dual-stack behavior comparison
-* Advanced firewall policies (L7 filtering)
+| Scenario       | Result               |
+| -------------- | -------------------- |
+| App → Internet |  Allowed             |
+| LAN → Internet |  Allowed             |
+| R2 → Internet  |  Blocked (by design) |
+| App → LAN      |  Blocked             |
+| LAN → App      |  Blocked             |
 
 ---
+
+## Architectural Insight
+
+This lab simulates a real cloud design pattern:
+
+* Private subnets (APP, LAN)
+* NAT Gateway (R1)
+* Internal routing layer (R2)
+* Stateful firewall enforcement
+
+---
+
+## Future Enhancements
+
+* IPv6 (no NAT required)
+* Dual-stack implementation
+* Layer 7 filtering (Nginx)
+* Kubernetes network policies
+
+---
+
