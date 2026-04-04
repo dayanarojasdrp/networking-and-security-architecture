@@ -4,7 +4,6 @@ The network is divided into multiple subnets based on functionality.
 
 ## Networks
 
-* 10.0.0.0/24 → Internet network
 * 192.168.0.0/28 → Inter-router communication
 * 172.20.0.0/24 → LAN network
 * 172.21.0.0/24 → Application network
