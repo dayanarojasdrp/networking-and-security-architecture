@@ -37,7 +37,6 @@ but all designs follow real cloud architecture principles:
 The implementation simulates cloud behavior using Docker and Linux networking.
 
  ## Limitations
-Aquí metes tu realidad (esto es IMPORTANTE y te hace ver profesional):
 Due to regional restrictions, some components could not be installed directly from official registries.
 
 To overcome this:
