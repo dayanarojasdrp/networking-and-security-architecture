@@ -1,0 +1,20 @@
+Kubernetes NetworkPolicy manifests were successfully created and applied in the Kind cluster.
+
+However, policy enforcement was not active because the default Kind networking layer does not include a CNI with NetworkPolicy enforcement capabilities.
+
+A production-ready implementation would require a compatible CNI plugin such as:
+- Calico
+- Cilium
+
+The manifests were preserved in the repository as part of the intended security architecture.
+
+
+
+
+
+NAME                               POD-SELECTOR   AGE
+allow-backend-egress-to-postgres   app=backend    10h
+allow-backend-to-postgres          app=postgres   10h
+allow-frontend-egress-to-backend   app=frontend   10h
+allow-frontend-to-backend          app=backend    10h
+default-deny-all                   <none>         10h
