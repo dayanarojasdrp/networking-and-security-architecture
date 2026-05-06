@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+
+  template:
+    metadata:
+      labels:
+        app: backend
+
+    spec:
+      containers:
+        - name: backend
+          image: backend-db:local
+          imagePullPolicy: Never
+
+          ports:
+            - containerPort: 3000
+
+          env:
+            - name: DB_HOST
+              value: postgres-service
+
+            - name: DB_PORT
+              value: "5432"
+
+            - name: DB_NAME
+              value: appdb
+
+            - name: DB_USER
+              value: appuser
+
+            - name: DB_PASSWORD
+              value: apppassword
