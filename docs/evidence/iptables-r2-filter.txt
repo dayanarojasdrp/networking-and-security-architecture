@@ -1,0 +1,15 @@
+dayarojas@linux-vm:~/networking-and-security-architecture-lab/docs/evidence$ docker exec -it R2 sh
+/ # iptables -L -n -v
+Chain INPUT (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination         
+
+Chain FORWARD (policy DROP 6 packets, 360 bytes)
+ pkts bytes target     prot opt in     out     source               destination         
+   59 11793 ACCEPT     all  --  *      *       0.0.0.0/0            0.0.0.0/0            ctstate RELATED,ESTABLISHED
+    3   180 ACCEPT     tcp  --  *      *       172.20.0.0/24        172.21.0.4           tcp dpt:80
+    3   180 DROP       tcp  --  *      *       172.20.0.0/24        172.21.0.2           tcp dpt:30528
+    2   120 ACCEPT     tcp  --  *      *       172.20.0.0/24        172.21.0.4           tcp dpt:443
+
+Chain OUTPUT (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination         
+/ # 
