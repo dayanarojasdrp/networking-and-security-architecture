@@ -1,20 +1,18 @@
 #!/bin/sh
 
+# R1 - LAN router
+# Interfaces:
+# eth0 -> Docker default bridge / external Docker network: 172.17.0.2/16
+# eth1 -> LAN network: 172.20.0.2/24
+# eth2 -> Transit network to R2: 192.168.0.2/28
 
+# Enable IPv4 forwarding
 sysctl -w net.ipv4.ip_forward=1
 
-iptables -F
-iptables -t nat -F
+# Route to app_net through R2
+ip route replace 172.21.0.0/24 via 192.168.0.3 dev eth2
 
-iptables -P FORWARD DROP
+# R1 does not apply firewall filtering in this lab.
+# Security enforcement is handled by R2.
 
-iptables -t nat -A POSTROUTING -o eth2 -j MASQUERADE
-
-iptables -A FORWARD -s 172.20.0.0/24 -o eth2 -j ACCEPT
-iptables -A FORWARD -d 172.20.0.0/24 -m state --state RELATED,ESTABLISHED -j ACCEPT
-
-iptables -A FORWARD -s 172.21.0.0/24 -o eth2 -j ACCEPT
-iptables -A FORWARD -d 172.21.0.0/24 -m state --state RELATED,ESTABLISHED -j ACCEPT
-
-iptables -A FORWARD -s 172.20.0.0/24 -d 172.21.0.0/24 -j DROP
-iptables -A FORWARD -s 172.21.0.0/24 -d 172.20.0.0/24 -j DROP
+echo "R1 configured: forwarding enabled and route to app_net added."
