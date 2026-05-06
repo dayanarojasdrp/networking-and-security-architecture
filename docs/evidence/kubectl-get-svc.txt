@@ -1,0 +1,6 @@
+NAME               TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+backend-service    ClusterIP   10.96.49.99    <none>        3000/TCP       13h
+frontend-service   NodePort    10.96.170.73   <none>        80:30528/TCP   14h
+kubernetes         ClusterIP   10.96.0.1      <none>        443/TCP        31d
+postgres-service   ClusterIP   10.96.94.204   <none>        5432/TCP       13h
+test               NodePort    10.96.249.15   <none>        80:30527/TCP   30d

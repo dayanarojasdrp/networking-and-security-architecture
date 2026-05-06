@@ -1,0 +1,2 @@
+NAME           STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+postgres-pvc   Bound    pvc-97792e65-2e68-4369-bdef-e55bcb65aedc   1Gi        RWO            standard       <unset>                 10h

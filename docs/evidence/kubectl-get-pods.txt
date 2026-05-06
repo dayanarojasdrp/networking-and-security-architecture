@@ -1,0 +1,5 @@
+NAME                        READY   STATUS    RESTARTS      AGE
+backend-56679bdcbf-mzmz5    1/1     Running   0             11h
+frontend-5b6778448-txx9l    1/1     Running   0             11h
+postgres-787c97c5d6-xrkzc   1/1     Running   0             10h
+test-764f5fc4f5-w4hxx       1/1     Running   2 (18h ago)   30d
