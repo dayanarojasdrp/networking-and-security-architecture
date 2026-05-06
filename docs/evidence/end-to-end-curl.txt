@@ -1,0 +1,5 @@
+End-to-end HTTPS validation from LAN client to Kubernetes backend through nginx-entry.
+{"status":"ok","backend":"running","database":"connected","db_time":"2026-05-06T13:12:41.103Z"}
+/ # curl --connect-timeout 5 http://172.21.0.2:30528
+curl: (28) Connection timeout after 5001 ms
+/ # 
