@@ -1,0 +1,28 @@
+dayarojas@linux-vm:~/networking-and-security-architecture-lab/docs/evidence$ docker exec -it R2 sh
+/ #  iptables -t nat -L -n -v
+Chain PREROUTING (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination         
+
+Chain INPUT (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination         
+
+Chain OUTPUT (policy ACCEPT 13 packets, 1068 bytes)
+ pkts bytes target     prot opt in     out     source               destination         
+    0     0 DOCKER_OUTPUT  all  --  *      *       0.0.0.0/0            127.0.0.11          
+
+Chain POSTROUTING (policy ACCEPT 18 packets, 1416 bytes)
+ pkts bytes target     prot opt in     out     source               destination         
+    0     0 DOCKER_POSTROUTING  all  --  *      *       0.0.0.0/0            127.0.0.11          
+    7   420 SNAT       tcp  --  *      *       172.20.0.0/24        172.21.0.4           tcp dpt:80 to:172.21.0.3
+    2   120 SNAT       tcp  --  *      *       172.20.0.0/24        172.21.0.4           tcp dpt:443 to:172.21.0.3
+
+Chain DOCKER_OUTPUT (1 references)
+ pkts bytes target     prot opt in     out     source               destination         
+    0     0 DNAT       tcp  --  *      *       0.0.0.0/0            127.0.0.11           tcp dpt:53 to:127.0.0.11:42203
+    0     0 DNAT       udp  --  *      *       0.0.0.0/0            127.0.0.11           udp dpt:53 to:127.0.0.11:40619
+
+Chain DOCKER_POSTROUTING (1 references)
+ pkts bytes target     prot opt in     out     source               destination         
+    0     0 SNAT       tcp  --  *      *       127.0.0.11           0.0.0.0/0            tcp spt:42203 to::53
+    0     0 SNAT       udp  --  *      *       127.0.0.11           0.0.0.0/0            udp spt:40619 to::53
+/ # 
