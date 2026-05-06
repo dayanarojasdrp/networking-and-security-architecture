@@ -1,0 +1,26 @@
+dayarojas@linux-vm:~/networking-and-security-architecture-lab/docs/evidence$ kubectl exec -it deployment/postgres -- psql -U appuser -d appdb
+psql (15.17)
+Type "help" for help.
+
+appdb=# SELECT * FROM persistence_test;
+ id |             message              
+----+----------------------------------
+  1 | Data persisted after pod restart
+(1 row)
+
+appdb=# /q
+appdb-# /p
+appdb-# \q
+dayarojas@linux-vm:~/networking-and-security-architecture-lab/docs/evidence$ kubectl delete pod -l app=postgres
+pod "postgres-787c97c5d6-xrkzc" deleted
+dayarojas@linux-vm:~/networking-and-security-architecture-lab/docs/evidence$ kubectl exec -it deployment/postgres -- psql -U appuser -d appdb
+psql (15.17)
+Type "help" for help.
+
+appdb=# SELECT * FROM persistence_test;
+ id |             message              
+----+----------------------------------
+  1 | Data persisted after pod restart
+(1 row)
+
+appdb=# \q
