@@ -1,236 +1,272 @@
-# Packet Flow Scenarios (Updated)
+# Packet Flow
 
-## Overview
+This document explains how packets move through the environment from the LAN client to the Kubernetes application stack.
 
-This document describes how packets flow across the network in the current lab implementation.
+The goal of the lab was to understand real traffic flow across:
 
-The architecture simulates a segmented infrastructure using:
+* routers
+* firewall layers
+* NAT
+* reverse proxying
+* Kubernetes services
+* backend/database communication
 
-* Multi-router topology (R1 as NAT Gateway, R2 as internal router)
-* Docker-based subnets
-* Stateful firewall (iptables)
-* Source NAT (MASQUERADE)
-
-All outbound traffic is forced through R1, which acts as the security boundary.
-
----
-
-## Network Summary
-
-| Network      | CIDR           | Description                     |
-| ------------ | -------------- | ------------------------------- |
-| Internet     | 172.17.0.0/16  | Docker bridge (external access) |
-| Inter-router | 192.168.0.0/28 | R1 ↔ R2 communication           |
-| LAN          | 172.20.0.0/24  | Internal LAN                    |
-| App Network  | 172.21.0.0/24  | Application network             |
+instead of only deploying containers.
 
 ---
 
-## Architecture Roles
+# High-Level Flow
 
-| Component | Role                          |
-| --------- | ----------------------------- |
-| R1        | NAT Gateway + Firewall        |
-| R2        | Internal router (App network) |
-| LAN       | Internal clients              |
-| APP       | Application subnet            |
-
----
-
-## Scenario 1 — App → Internet
-
-### Flow
-
-1. App container (172.21.0.x) sends traffic
-2. Default gateway → R2 (172.21.0.2)
-3. R2 forwards traffic to R1 (192.168.0.2)
-4. R1 evaluates firewall rules
-5. Traffic is allowed (APP → Internet permitted)
-6. R1 applies NAT (MASQUERADE on eth2)
-7. Packet exits via Docker bridge (172.17.0.0/16)
-8. Response returns to R1
-9. R1 matches connection tracking (ESTABLISHED, RELATED)
-10. Packet is forwarded back to R2
-11. R2 delivers packet to App container
-
-### Result
-
-✔ Allowed
-✔ NAT applied at R1
-✔ Fully functional outbound connectivity
+```txt id="m3r8n0"
+LAN Client
+→ R1
+→ R2 firewall/NAT
+→ nginx-entry HTTPS
+→ Kubernetes frontend
+→ backend-service
+→ postgres-service
+```
 
 ---
 
-## Scenario 2 — LAN → Internet
+# Step 1 — Client Request
 
-### Flow
+The process starts from a client located in the LAN network:
 
-1. LAN host (172.20.0.x) sends traffic
-2. Default gateway → R1 (172.20.0.2)
-3. R1 evaluates firewall rules
-4. Traffic is allowed (LAN → Internet permitted)
-5. R1 applies NAT (MASQUERADE)
-6. Packet exits via eth2 (Docker bridge)
-7. Response returns to R1
-8. R1 forwards response back to LAN
+```txt id="2vynjj"
+172.20.0.0/24
+```
 
-### Result
+The client sends an HTTPS request:
 
-✔ Allowed
-✔ NAT applied
-✔ Direct outbound access
+```bash
+curl -k https://172.21.0.4/api
+```
 
----
+The `-k` flag is required because nginx-entry uses a self-signed TLS certificate.
 
-## Scenario 3 — App → LAN (Blocked)
+Destination:
 
-### Flow
+```txt id="d9cfwx"
+172.21.0.4
+```
 
-1. App container sends traffic to LAN (172.20.0.0/24)
-2. Packet reaches R2
-3. R2 forwards to R1
-4. R1 evaluates firewall rules
-5. Explicit DROP rule matches
-6. Packet is discarded
+which corresponds to:
 
-### Result
-
- Blocked
- No lateral movement
- Network segmentation enforced
+```txt id="7t1yfj"
+nginx-entry
+```
 
 ---
 
-## Scenario 4 — LAN → App (Blocked)
+# Step 2 — R1 Routing
 
-### Flow
+R1 receives the packet from the LAN side.
 
-1. LAN host sends traffic to App Network
-2. Packet reaches R1
-3. Firewall rules are evaluated
-4. DROP rule matches
-5. Packet is discarded
+R1 knows that the application network:
 
-### Result
+```txt id="5ts1sx"
+172.21.0.0/24
+```
 
- Blocked
- Isolation between subnets
+must be reached through R2 using the transit network:
 
----
+```txt id="3hkl2l"
+192.168.0.3
+```
 
-## Scenario 5 — R2 → Internet (Current Behavior)
+Static route example:
 
-### Flow
+```txt id="swh8yv"
+172.21.0.0/24 via 192.168.0.3
+```
 
-1. R2 generates traffic (e.g., ping 8.8.8.8)
-2. Packet is sent to R1 (default route)
-3. Traffic is evaluated by firewall
-
-### Current Behavior
-
- Not allowed by design
-
-### Explanation
-
-* Firewall rules are focused on forwarding traffic from internal networks
-* R2 is not intended to act as an internet client
-* The architecture enforces that only internal networks (LAN / APP) access external resources
-
-### Result
-
- No direct internet access from R2
- Consistent with secure network design
+R1 forwards the packet toward R2.
 
 ---
 
-## Scenario 6 — Return Traffic Handling
+# Step 3 — R2 Firewall Inspection
 
-### Flow
+R2 acts as the security edge.
 
-1. Internal host initiates connection
+The FORWARD policy on R2 is:
 
-2. External system responds
+```txt id="h0w31v"
+DROP
+```
 
-3. Packet arrives at R1
+meaning traffic is denied unless explicitly allowed.
 
-4. Connection tracking module evaluates state:
+Allowed traffic:
 
-   * ESTABLISHED
-   * RELATED
+* TCP/80 to nginx-entry
+* TCP/443 to nginx-entry
+* established connections
 
-5. Packet is automatically allowed
+Blocked traffic:
 
-6. Traffic is forwarded back to origin
+* direct access to Kubernetes NodePort
 
-### Result
+Example allowed flow:
 
- No explicit rule required
- Stateful firewall behavior
-
----
-
-## Key Concepts
-
-### NAT (MASQUERADE)
-
-* Implemented on R1 (eth2)
-* Translates private IPs to external interface
-* Required for outbound internet access
+```txt id="5qfxnp"
+172.20.0.0/24
+→
+172.21.0.4 TCP/443
+```
 
 ---
 
-### Stateful Firewall
+# Step 4 — SNAT Processing
 
-* Based on connection tracking
-* Allows return traffic automatically
-* Prevents unsolicited inbound connections
+Initially, return traffic from nginx-entry back to the LAN network failed.
 
----
+The reason was that nginx-entry did not know how to route packets back to:
 
-### Network Segmentation
+```txt id="8t9zsl"
+172.20.0.0/24
+```
 
-* LAN and APP networks are isolated
-* No lateral movement allowed
-* Enforced via DROP rules in FORWARD chain
+To solve this, SNAT was configured on R2.
 
----
+Example:
 
-### Controlled Egress
+```bash
+iptables -t nat -A POSTROUTING \
+  -s 172.20.0.0/24 \
+  -d 172.21.0.4 \
+  -p tcp \
+  --dport 443 \
+  -j SNAT \
+  --to-source 172.21.0.3
+```
 
-* Only approved subnets can access internet
-* Traffic must pass through R1
+This causes nginx-entry to see the request as coming from:
 
----
+```txt id="ltxj4d"
+172.21.0.3
+```
 
-## Summary
+instead of the original LAN client.
 
-| Scenario       | Result               |
-| -------------- | -------------------- |
-| App → Internet |  Allowed             |
-| LAN → Internet |  Allowed             |
-| R2 → Internet  |  Blocked (by design) |
-| App → LAN      |  Blocked             |
-| LAN → App      |  Blocked             |
+As a result:
 
----
-
-## Architectural Insight
-
-This lab simulates a real cloud design pattern:
-
-* Private subnets (APP, LAN)
-* NAT Gateway (R1)
-* Internal routing layer (R2)
-* Stateful firewall enforcement
+* return traffic succeeds
+* nginx-entry remains isolated in app_net
+* no additional routes were required inside nginx-entry
 
 ---
 
-## Future Enhancements
+# Step 5 — nginx-entry TLS Termination
 
-* IPv6 (no NAT required)
-* Dual-stack implementation
-* Layer 7 filtering (Nginx)
-* Kubernetes network policies
+nginx-entry receives the HTTPS request.
+
+Responsibilities:
+
+* receive TLS traffic
+* terminate HTTPS
+* reverse proxy traffic toward Kubernetes
+
+The request is then forwarded internally to:
+
+```txt id="y4wr8w"
+172.21.0.2:30528
+```
+
+which corresponds to the Kubernetes frontend NodePort.
 
 ---
+
+# Step 6 — Kubernetes Frontend
+
+The frontend service receives the request and forwards API traffic internally to:
+
+```txt id="7qv7pl"
+backend-service
+```
+
+This communication stays inside the Kubernetes cluster.
+
+---
+
+# Step 7 — Backend to PostgreSQL
+
+The backend communicates with PostgreSQL using:
+
+```txt id="6hrwdv"
+postgres-service
+```
+
+through Kubernetes internal service discovery.
+
+The database remains internal and is not exposed to the LAN network.
+
+---
+
+# Step 8 — Response Path
+
+The response returns through the same path:
+
+```txt id="0h7vzp"
+postgres
+→ backend
+→ frontend
+→ nginx-entry
+→ R2
+→ R1
+→ LAN client
+```
+
+Successful response example:
+
+```json
+{"status":"ok","backend":"running","database":"connected","db_time":"2026-05-06T02:30:01.354Z"}
+```
+
+---
+
+# Why Direct NodePort Access Fails
+
+Direct access to the frontend NodePort was intentionally blocked.
+
+Test:
+
+```bash
+curl --connect-timeout 5 http://172.21.0.2:30528
+```
+
+Result:
+
+```txt
+curl: (28) Connection timeout after 5001 ms
+```
+
+This confirms that the firewall prevents LAN clients from bypassing nginx-entry.
+
+The only valid application entry path is:
+
+```txt id="r95l58"
+LAN
+→ R1
+→ R2
+→ nginx-entry
+→ Kubernetes
+```
+
+---
+
+# Final Design Outcome
+
+The final packet flow successfully demonstrates:
+
+* segmented networking
+* Layer 3 routing
+* firewall enforcement
+* NAT behavior
+* TLS termination
+* reverse proxying
+* Kubernetes service communication
+* internal database isolation
+* controlled application exposure
+
 
