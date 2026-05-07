@@ -1,54 +1,272 @@
-## Project Overview
-This project simulates a real-world production-like networking and security architecture.
+# Networking and Security Architecture Lab
 
-It integrates multiple layers:
+## Overview
 
-- Network infrastructure (routing, NAT, firewall)
-- Kubernetes-based application platform
-- TLS termination and reverse proxy (Nginx)
-- Multi-layer security (L3–L7)
-- Cloud architecture design (AWS, Azure, GCP)
-- SDN and BGP concepts
+This project is a local networking and Kubernetes lab designed to simulate a segmented application architecture similar to what could exist in a cloud or enterprise environment.
 
-The goal is to demonstrate a complete understanding of how traffic flows securely from the Internet to applications and across infrastructure layers.
+The main goal of the lab was not only to deploy containers, but to understand how traffic moves across different layers:
 
-## Architecture Flow
-Client → Internet → Firewall/NAT → Nginx (TLS)
-→ Kubernetes (Ingress → Services → Pods)
-→ Backend → Database
-→ Internal Routing → Subnets → BGP (conceptual)
+* routing
+* firewall filtering
+* NAT
+* TLS termination
+* reverse proxying
+* Kubernetes services
+* backend/database communication
+* persistence
 
- ## Security Layers
-- L3/L4: iptables firewall, NAT
-- L7: Nginx reverse proxy + filtering
-- Kubernetes: Network Policies (Zero Trust)
-- TLS: HTTPS with PFS (ECDHE)
-- Cloud: security groups, NSG, firewall rules (conceptual)
+The environment was built step by step using Docker containers, custom networks, Kind Kubernetes, Nginx, PostgreSQL, and Linux networking tools.
 
-## Cloud Approach
-This project is implemented locally due to environment limitations,
-but all designs follow real cloud architecture principles:
+The project focuses heavily on troubleshooting, packet flow understanding, and network segmentation instead of only deploying applications.
 
-- VPC design
-- Public vs private subnets
-- Load balancers
-- Security boundaries
+---
 
-The implementation simulates cloud behavior using Docker and Linux networking.
+# Final Architecture
 
- ## Limitations
-Due to regional restrictions, some components could not be installed directly from official registries.
+```txt
+LAN Client
+    ↓
+R1 (Routing)
+    ↓
+R2 (Firewall + NAT)
+    ↓
+nginx-entry (TLS termination / reverse proxy)
+    ↓
+Kubernetes Frontend
+    ↓
+Backend API
+    ↓
+PostgreSQL + Persistent Volume
+```
 
-To overcome this:
-- Docker images were downloaded externally and transferred manually
-- Kubernetes components were executed in an offline environment
+Traffic from the LAN network is intentionally forced through the nginx entry point.
 
-Despite these limitations, all core concepts were successfully implemented and validated.
+Direct access to Kubernetes NodePort services is blocked by firewall rules on R2.
 
-## What This Project Demonstrates
-- Deep understanding of networking fundamentals
-- Real traffic flow analysis
-- Kubernetes networking and isolation
-- Secure system design
-- Cloud-ready architecture thinking
-- Troubleshooting using real tools (tcpdump, nmap, etc.)
+---
+
+# Technologies Used
+
+## Container and Platform
+
+* Docker
+* Kind (Kubernetes in Docker)
+* Kubernetes
+* Nginx
+* PostgreSQL
+* Node.js
+
+## Networking
+
+* Linux routing
+* iptables
+* SNAT
+* static routing
+* Docker bridge networks
+* segmented subnets
+
+## Security
+
+* TLS / HTTPS
+* reverse proxy isolation
+* firewall filtering
+* blocked direct NodePort access
+* NetworkPolicy manifests
+
+## Validation and Troubleshooting
+
+* curl
+* nc
+* kubectl
+* docker exec
+* iptables inspection
+* logs and connectivity testing
+
+---
+
+# Network Topology
+
+## Networks
+
+| Network        | Purpose                           |
+| -------------- | --------------------------------- |
+| 172.20.0.0/24  | LAN network                       |
+| 172.21.0.0/24  | Application network               |
+| 192.168.0.0/28 | Transit network between R1 and R2 |
+
+## Main Components
+
+| Component   | Role                         |
+| ----------- | ---------------------------- |
+| R1          | LAN routing                  |
+| R2          | Firewall + NAT security edge |
+| nginx-entry | HTTPS entry point            |
+| frontend    | Kubernetes frontend service  |
+| backend     | API service                  |
+| postgres    | Database service             |
+
+---
+
+# Kubernetes Architecture
+
+The Kubernetes cluster was deployed using Kind.
+
+## Services
+
+| Service          | Type      |
+| ---------------- | --------- |
+| frontend-service | NodePort  |
+| backend-service  | ClusterIP |
+| postgres-service | ClusterIP |
+
+The backend communicates internally with PostgreSQL using Kubernetes services.
+
+The PostgreSQL deployment uses a PersistentVolumeClaim so that data survives pod recreation.
+
+---
+
+# Security Controls
+
+## Firewall
+
+R2 uses iptables with a default DROP forwarding policy.
+
+Allowed traffic:
+
+* HTTP to nginx-entry
+* HTTPS to nginx-entry
+* established and related traffic
+
+Blocked traffic:
+
+* direct LAN access to Kubernetes NodePort
+
+## TLS
+
+Nginx performs TLS termination using a self-signed certificate.
+
+HTTPS validation is tested using:
+
+```bash
+curl -k https://172.21.0.4/api
+```
+
+## Reverse Proxy Isolation
+
+Clients are required to access the application through nginx-entry.
+
+Direct access to the Kubernetes frontend NodePort is intentionally blocked.
+
+## Network Policies
+
+NetworkPolicy manifests were created for:
+
+* frontend → backend
+* backend → postgres
+
+However, enforcement was not active because the default Kind networking layer does not include a compatible CNI with NetworkPolicy enforcement support.
+
+---
+
+# Validation
+
+The lab was validated using real connectivity tests.
+
+## Successful HTTPS request
+
+```bash
+curl -k https://172.21.0.4/api
+```
+
+Example response:
+
+```json
+{"status":"ok","backend":"running","database":"connected"}
+```
+
+## Direct NodePort access blocked
+
+```bash
+curl --connect-timeout 5 http://172.21.0.2:30528
+```
+
+Result:
+
+```txt
+Connection timeout
+```
+
+## PostgreSQL persistence test
+
+A table was created inside PostgreSQL, data was inserted, the pod was recreated, and the data remained available through the PersistentVolumeClaim.
+
+---
+
+# Repository Structure
+
+```txt
+architecture/
+docs/
+edge/
+infrastructure/
+platform/
+security/
+cloud/
+```
+
+## Main Areas
+
+* `platform/kubernetes/manifests`
+  Kubernetes manifests used in the lab.
+
+* `infrastructure/nat-firewall`
+  Routing, firewall, and NAT configuration.
+
+* `edge/nginx`
+  Reverse proxy and TLS configuration.
+
+* `docs/evidence`
+  Real command outputs and validation results from the lab.
+
+* `architecture`
+  Design decisions and packet flow explanations.
+
+---
+
+# Known Limitations
+
+## NetworkPolicy Enforcement
+
+Kind does not enforce Kubernetes NetworkPolicies by default without an additional CNI such as Calico or Cilium.
+
+The manifests were preserved as part of the intended architecture design.
+
+## TLS Certificates
+
+The environment uses self-signed certificates for local HTTPS testing.
+
+## IPv6
+
+IPv6 was investigated but not enabled because Docker daemon IPv6 support was disabled in the current environment.
+
+## Production Scope
+
+This project is a local educational and architectural simulation, not a production-ready deployment.
+
+---
+
+# Main Lessons Learned
+
+* Routing success does not guarantee application success.
+* Return paths matter as much as forward paths.
+* Kubernetes services simplify internal communication.
+* Local images and imagePullPolicy are critical in restricted environments.
+* Firewall rules must reflect the actual traffic flow.
+* Persistence must be explicitly configured.
+* NetworkPolicies depend on the underlying CNI implementation.
+
+---
+
+# Author
+
+This project was built as a hands-on networking and Kubernetes architecture lab focused on understanding real packet flow, segmentation, troubleshooting, and infrastructure behavior across multiple layers.
