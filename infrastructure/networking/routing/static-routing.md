@@ -1,162 +1,211 @@
-# Static Routing (Updated)
+# Static Routing
 
-## Overview
+This document explains the static routing configuration used in the lab environment.
 
-Static routing is used in this lab to explicitly define how packets travel between network segments.
+The routing design was intentionally kept simple in order to clearly understand how packets move between:
 
-Each router is manually configured with routes that determine how to reach remote networks. This provides precise control over traffic flow and is ideal for a controlled lab environment.
+* the LAN network
+* the transit network
+* the application network
 
----
-
-## Why Static Routing?
-
-Static routing is used because:
-
-* The topology is small and deterministic
-* Full control over traffic paths is required
-* It simplifies debugging during network construction
-* It avoids the complexity of dynamic protocols (e.g., OSPF, BGP)
+before introducing more advanced routing concepts.
 
 ---
 
-## Network Topology
+# Network Overview
 
-| Network      | CIDR           | Location                               |
-| ------------ | -------------- | -------------------------------------- |
-| Internet     | 172.17.0.0/16  | Docker bridge (external access via R1) |
-| Inter-router | 192.168.0.0/28 | R1 ↔ R2                                |
-| LAN          | 172.20.0.0/24  | Connected to R1                        |
-| App Network  | 172.21.0.0/24  | Connected to R2                        |
+| Network         | CIDR           | Purpose                        |
+| --------------- | -------------- | ------------------------------ |
+| LAN network     | 172.20.0.0/24  | Client-side network            |
+| app_net         | 172.21.0.0/24  | Application network            |
+| transit network | 192.168.0.0/28 | Router-to-router communication |
 
 ---
 
-## Routing Design
+# Router Topology
 
-### R1 — Main Router (NAT Gateway)
+```txt id="x2l8j9"
+LAN Client
+    ↓
+R1
+    ↓
+Transit Network
+    ↓
+R2
+    ↓
+app_net
+    ↓
+nginx-entry / Kubernetes
+```
 
-R1 is the central router and acts as:
+---
 
-* Gateway to the internet (via Docker bridge)
-* Router for LAN
-* Transit router for App Network traffic
+# R1 Routing
 
-#### Routes configured:
+R1 is connected to:
 
-* Default route → Docker bridge (internet)
-* Route to App Network → via R2
+* the LAN network
+* the transit network
+
+Interfaces:
+
+| Interface | Address     |
+| --------- | ----------- |
+| eth1      | 172.20.0.2  |
+| eth2      | 192.168.0.2 |
+
+R1 must know how to reach the application network:
+
+```txt id="r5f9qy"
+172.21.0.0/24
+```
+
+through R2.
+
+Static route configured on R1:
 
 ```bash
 ip route add 172.21.0.0/24 via 192.168.0.3
 ```
 
----
+This tells R1:
 
-### R2 — Internal Router
-
-R2 connects the App Network with the rest of the infrastructure.
-
-All external communication must go through R1.
-
-#### Routes configured:
-
-* Default route → R1
-* Route to LAN → via R1
-
-```bash
-ip route add default via 192.168.0.2
-ip route add 172.20.0.0/24 via 192.168.0.2
+```txt id="2y9o0j"
+To reach app_net, forward traffic to R2.
 ```
 
 ---
 
-## How Routing Works
+# R2 Routing
 
-### Example 1 — App → Internet
+R2 is connected to:
 
-1. App container sends traffic (172.21.0.x)
-2. Packet goes to R2 (default gateway)
-3. R2 forwards to R1 (192.168.0.2)
-4. R1 forwards traffic to Docker bridge (internet)
-5. NAT is applied on R1
-6. Response returns through the same path
+* the application network
+* the transit network
 
----
+Interfaces:
 
-### Example 2 — LAN → Internet
+| Interface | Address     |
+| --------- | ----------- |
+| eth0      | 172.21.0.3  |
+| eth1      | 192.168.0.3 |
 
-1. LAN host sends traffic (172.20.0.x)
-2. Packet goes directly to R1
-3. R1 forwards to internet via Docker bridge
-4. NAT is applied
-5. Response returns to R1 and back to LAN
+R2 must know how to return traffic toward the LAN network:
 
----
+```txt id="f0v69v"
+172.20.0.0/24
+```
 
-### Example 3 — App → LAN
+through R1.
 
-1. App sends traffic to LAN
-2. R2 forwards packet to R1
-3. R1 identifies LAN as directly connected
-4. Packet is forwarded to LAN (if firewall allows)
+Static route configured on R2:
 
----
+```bash
+ip route add 172.20.0.0/24 via 192.168.0.2
+```
 
-## Important Notes
+This tells R2:
 
-* Routing must exist in **both directions** for communication to work
-* Missing routes = unreachable networks
-* Routing does NOT guarantee access → firewall rules still apply
-* R1 is the **only exit point** to the internet
+```txt id="4mj5i5"
+To reach the LAN network, forward traffic to R1.
+```
 
 ---
 
-## Key Concepts
+# Why Static Routing Was Used
 
-### Routing
+Static routing was chosen because:
 
-Defines **where packets go**
+* the topology is small
+* the environment is controlled
+* the objective was to understand packet flow clearly
 
----
+Using static routes made troubleshooting easier during:
 
-### Firewall
-
-Defines **whether packets are allowed**
-
----
-
-### NAT
-
-Defines **how packets are translated externally**
+* firewall testing
+* NAT debugging
+* HTTPS validation
+* Kubernetes connectivity testing
 
 ---
 
-## Design Insight
+# Interaction with Firewall and NAT
 
-This routing model follows a real-world cloud pattern:
+Routing alone was not enough for full connectivity.
 
-* R1 behaves like a **NAT Gateway**
-* R2 behaves like an **internal routing layer**
-* LAN and App networks behave like **private subnets**
+Even after routes were working:
+
+* HTTPS initially failed
+* return traffic problems still existed
+
+This happened because:
+
+* R2 firewall rules were incomplete
+* nginx-entry did not know how to return traffic to the LAN network
+
+SNAT on R2 was later added to solve the return path issue.
+
+This demonstrated an important lesson:
+
+```txt id="a9kk9n"
+successful routing does not automatically mean successful application communication
+```
+
+Firewall behavior and NAT must also be correct.
+
+---
+
+# Validation
+
+Routing was validated through:
+
+* ping tests
+* curl requests
+* Kubernetes service access
+* HTTPS traffic flow
+
+Successful validation example:
+
+```bash
+curl -k https://172.21.0.4/api
+```
+
+Response:
+
+```json
+{"status":"ok","backend":"running","database":"connected"}
+```
+
+This confirmed:
+
+* R1 routing worked
+* R2 routing worked
+* return traffic worked
+* firewall rules matched the intended flow
 
 ---
 
-## Summary
+# Design Outcome
 
-| Path            | Behavior         |
-| --------------- | ---------------- |
-| App → R2 → R1   | Routed correctly |
-| LAN → R1        | Direct routing   |
-| R2 → R1         | Default path     |
-| Internet access | Only through R1  |
+The final static routing setup successfully allowed:
 
----
+```txt id="r0sq6x"
+LAN
+↔
+R1
+↔
+R2
+↔
+app_net
+↔
+Kubernetes
+```
 
-## Future Improvements
+while still maintaining:
 
-* Introduce dynamic routing (BGP with FRR)
-* Add redundant paths (failover)
-* Implement IPv6 (dual-stack routing)
-* Integrate routing with Kubernetes networking
+* firewall control
+* segmented networking
+* controlled entry points
+* HTTPS-only application exposure
 
----
 
